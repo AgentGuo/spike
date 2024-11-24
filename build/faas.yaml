@@ -1,0 +1,13 @@
+server_ip: localhost
+server_port: 13306
+mysql_dsn: root:faaspassword@tcp(127.0.0.1:3306)/faas?charset=utf8mb4&parseTime=True&loc=Local
+# debug/info/warn/error
+log_level: debug
+aws_fass_cluster: faas_cluster
+aws_subnets:
+  - subnet-01930cb57dbc12f7e
+  - subnet-0c77aae8c226d039c
+  - subnet-02bd39d1f8b337c22
+aws_security_groups:
+  - sg-02221dbcd555d5277
+
