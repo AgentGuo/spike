@@ -141,6 +141,15 @@ func (a *AwsClient) RegTaskDef(functionName string, cpu int32, memory int32, ima
 					Name:          aws.String("invoke_port"),
 					Protocol:      types.TransportProtocolTcp,
 				}},
+				LogConfiguration: &types.LogConfiguration{
+					LogDriver: types.LogDriverAwslogs,
+					Options: map[string]string{
+						"awslogs-region":        "cn-north-1",
+						"awslogs-group":         "pixels-worker-faas",
+						"awslogs-stream-prefix": "ecs",
+					},
+					SecretOptions: nil,
+				},
 			},
 		},
 		Family:      aws.String(functionName),
