@@ -26,6 +26,7 @@ type ServerConfig struct {
 	AwsFassCluster    string   `yaml:"aws_fass_cluster"`
 	AwsSubnets        []string `yaml:"aws_subnets"`
 	AwsSecurityGroups []string `yaml:"aws_security_groups"`
+	TaskRole          string   `yaml:"task_role"`
 }
 
 func SetConfigPath(path string) {

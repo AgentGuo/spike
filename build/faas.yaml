@@ -10,4 +10,4 @@ aws_subnets:
   - subnet-02bd39d1f8b337c22
 aws_security_groups:
   - sg-02221dbcd555d5277
-
+task_role: PixelsFaaSRole

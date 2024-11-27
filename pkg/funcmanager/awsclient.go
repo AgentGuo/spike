@@ -164,8 +164,8 @@ func (a *AwsClient) RegTaskDef(functionName string, cpu int32, memory int32, ima
 			CpuArchitecture:       types.CPUArchitectureX8664,
 			OperatingSystemFamily: types.OSFamilyLinux,
 		},
-		ExecutionRoleArn: aws.String("ecsTaskExecutionRole"),
-		TaskRoleArn:      aws.String("ecsTaskExecutionRole"),
+		ExecutionRoleArn: aws.String(config.GetConfig().TaskRole),
+		TaskRoleArn:      aws.String(config.GetConfig().TaskRole),
 	})
 	if err != nil {
 		a.logger.Errorf("failed to register task definition, err: %v, resp: %s", err, utils.GetJson(output))
