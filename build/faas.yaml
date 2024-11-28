@@ -11,3 +11,4 @@ aws_subnets:
 aws_security_groups:
   - sg-02221dbcd555d5277
 task_role: PixelsFaaSRole
+dispatch_timeout: 20

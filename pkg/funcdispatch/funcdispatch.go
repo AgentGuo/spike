@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/AgentGuo/faas/api"
+	"github.com/AgentGuo/faas/cmd/server/config"
 	"github.com/AgentGuo/faas/pkg/funcdispatch/proto"
 	"github.com/AgentGuo/faas/pkg/logger"
 	"github.com/AgentGuo/faas/pkg/storage"
@@ -61,7 +62,7 @@ func (f *FuncDispatch) CallFunction(req *api.CallFunctionRequest) (*api.CallFunc
 		return nil, err
 	}
 	funcServiceClient := proto.NewFunctionServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.GetConfig().DispatchTimeout)*time.Second)
 	defer cancel()
 	funcServiceResp, err := funcServiceClient.CallFunction(ctx, &proto.FunctionRequest{
 		Payload:   req.Payload,

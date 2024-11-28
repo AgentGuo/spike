@@ -27,6 +27,7 @@ type ServerConfig struct {
 	AwsSubnets        []string `yaml:"aws_subnets"`
 	AwsSecurityGroups []string `yaml:"aws_security_groups"`
 	TaskRole          string   `yaml:"task_role"`
+	DispatchTimeout   int      `yaml:"dispatch_timeout"`
 }
 
 func SetConfigPath(path string) {
