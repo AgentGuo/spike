@@ -33,6 +33,7 @@ public class InterfaceLoader {
 
             URL jarUrl = jarFile.toURI().toURL();
             URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, InterfaceLoader.class.getClassLoader());
+            Thread.currentThread().setContextClassLoader(classLoader);
 
             // 使用 ServiceLoader 加载实现了 MyInterface 的类
             ServiceLoader<RequestHandler> serviceLoader = ServiceLoader.load(RequestHandler.class, classLoader);
