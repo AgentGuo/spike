@@ -5,10 +5,10 @@
 */
 package main
 
-import "github.com/AgentGuo/faas/cmd/server/cmd"
+import "github.com/AgentGuo/spike/cmd/server/cmd"
 
 func main() {
 	cmd.Execute()
 }
 
-// faas 配置从函数调用决定
+// spike 配置从函数调用决定

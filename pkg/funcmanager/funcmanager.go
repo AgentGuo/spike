@@ -7,9 +7,9 @@ package funcmanager
 
 import (
 	"fmt"
-	"github.com/AgentGuo/faas/api"
-	"github.com/AgentGuo/faas/pkg/logger"
-	"github.com/AgentGuo/faas/pkg/storage"
+	"github.com/AgentGuo/spike/api"
+	"github.com/AgentGuo/spike/pkg/logger"
+	"github.com/AgentGuo/spike/pkg/storage"
 	"github.com/sirupsen/logrus"
 	"strconv"
 	"sync"

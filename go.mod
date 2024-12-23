@@ -1,4 +1,4 @@
-module github.com/AgentGuo/faas
+module github.com/AgentGuo/spike
 
 go 1.21
 

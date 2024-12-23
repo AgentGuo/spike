@@ -40,7 +40,7 @@ func GetConfig() *ServerConfig {
 		configInstance = &ServerConfig{
 			ServerIp:       "127.0.0.1",
 			ServerPort:     13306,
-			MysqlDsn:       "root:faaspassword@tcp(127.0.0.1:3306)/faas",
+			MysqlDsn:       "root:faaspassword@tcp(127.0.0.1:3306)/spike",
 			LogLevel:       "info",
 			AwsFassCluster: "fass_cluster",
 		}

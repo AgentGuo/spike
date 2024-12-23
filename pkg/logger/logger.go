@@ -6,7 +6,7 @@
 package logger
 
 import (
-	"github.com/AgentGuo/faas/cmd/server/config"
+	"github.com/AgentGuo/spike/cmd/server/config"
 	"github.com/sirupsen/logrus"
 	"os"
 	"sync"

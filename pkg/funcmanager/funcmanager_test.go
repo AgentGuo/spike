@@ -6,7 +6,7 @@
 package funcmanager
 
 import (
-	"github.com/AgentGuo/faas/api"
+	"github.com/AgentGuo/spike/api"
 	"testing"
 	"time"
 )
@@ -22,7 +22,7 @@ func TestFuncManager_CreateFunction(t *testing.T) {
 	}{
 		{"test1", args{&api.CreateFunctionRequest{
 			FunctionName: "test",
-			ImageUrl:     "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/faas-java-worker:1.0",
+			ImageUrl:     "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/spike-java-worker:1.0",
 			Resources: []*api.ResourceSpec{{
 				Cpu:               1024,
 				Memory:            3072,

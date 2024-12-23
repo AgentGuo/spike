@@ -8,15 +8,16 @@ package funcdispatch
 import (
 	"context"
 	"fmt"
-	"github.com/AgentGuo/faas/api"
-	"github.com/AgentGuo/faas/cmd/server/config"
-	"github.com/AgentGuo/faas/pkg/funcdispatch/proto"
-	"github.com/AgentGuo/faas/pkg/logger"
-	"github.com/AgentGuo/faas/pkg/storage"
+	"github.com/AgentGuo/spike/api"
+	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/logger"
+	"github.com/AgentGuo/spike/pkg/storage"
+	"github.com/AgentGuo/spike/pkg/worker"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"math/rand"
+	"strconv"
 	"time"
 )
 
@@ -61,15 +62,15 @@ func (f *FuncDispatch) CallFunction(req *api.CallFunctionRequest) (*api.CallFunc
 	if err != nil {
 		return nil, err
 	}
-	funcServiceClient := proto.NewFunctionServiceClient(conn)
+	workerServiceClient := worker.NewSpikeWorkerServiceClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.GetConfig().DispatchTimeout)*time.Second)
 	defer cancel()
-	funcServiceResp, err := funcServiceClient.CallFunction(ctx, &proto.FunctionRequest{
+	funcServiceResp, err := workerServiceClient.CallWorkerFunction(ctx, &worker.CallWorkerFunctionReq{
 		Payload:   req.Payload,
-		RequestId: time.Now().Unix(),
+		RequestId: strconv.FormatInt(time.Now().Unix(), 10),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &api.CallFunctionResponse{ErrorCode: funcServiceResp.ErrorCode, Payload: funcServiceResp.Payload}, nil
+	return &api.CallFunctionResponse{ErrorCode: 0, Payload: funcServiceResp.Payload}, nil
 }

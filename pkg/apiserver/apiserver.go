@@ -8,11 +8,11 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	"github.com/AgentGuo/faas/api"
-	"github.com/AgentGuo/faas/cmd/server/config"
-	"github.com/AgentGuo/faas/pkg/funcdispatch"
-	"github.com/AgentGuo/faas/pkg/funcmanager"
-	"github.com/AgentGuo/faas/pkg/logger"
+	"github.com/AgentGuo/spike/api"
+	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/funcdispatch"
+	"github.com/AgentGuo/spike/pkg/funcmanager"
+	"github.com/AgentGuo/spike/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"log"
 	"net"
@@ -23,7 +23,7 @@ import (
 
 type server struct {
 	logger *logrus.Logger
-	api.UnimplementedFaaSServer
+	api.UnimplementedSpikeServiceServer
 	funcManager  *funcmanager.FuncManager
 	funcDispatch *funcdispatch.FuncDispatch
 }
@@ -72,7 +72,7 @@ func StartApiServer() {
 	}
 
 	grpcServer := grpc.NewServer()
-	api.RegisterFaaSServer(grpcServer, &server{
+	api.RegisterSpikeServiceServer(grpcServer, &server{
 		logger:       logger.GetLogger(),
 		funcManager:  funcmanager.NewFuncManager(),
 		funcDispatch: funcdispatch.NewFuncDispatch(),

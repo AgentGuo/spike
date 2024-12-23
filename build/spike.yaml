@@ -1,6 +1,6 @@
 server_ip: localhost
 server_port: 13306
-mysql_dsn: root:faaspassword@tcp(127.0.0.1:3306)/faas?charset=utf8mb4&parseTime=True&loc=Local
+mysql_dsn: root:faaspassword@tcp(127.0.0.1:3306)/spike?charset=utf8mb4&parseTime=True&loc=Local
 # debug/info/warn/error
 log_level: debug
 aws_fass_cluster: faas_cluster

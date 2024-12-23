@@ -22,7 +22,7 @@ func TestMysqlClient_GetFuncMetaDataByFunctionName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewMysqlClient("root:faaspassword@tcp(127.0.0.1:3306)/faas?charset=utf8mb4&parseTime=True&loc=Local")
+			m := NewMysqlClient()
 			got, err := m.GetFuncMetaDataByFunctionName(tt.args.functionName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetFuncMetaDataByFunctionName() error = %v, wantErr %v", err, tt.wantErr)

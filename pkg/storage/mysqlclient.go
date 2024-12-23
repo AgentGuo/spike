@@ -6,8 +6,8 @@
 package storage
 
 import (
-	"github.com/AgentGuo/faas/cmd/server/config"
-	"github.com/AgentGuo/faas/pkg/logger"
+	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -15,7 +15,7 @@ import (
 	"sync"
 )
 
-// sudo docker run --name faas-mysql -e MYSQL_ROOT_PASSWORD=faaspassword -p 3306:3306 -d mysql:8.0.31
+// sudo docker run --name spike-mysql -e MYSQL_ROOT_PASSWORD=faaspassword -p 3306:3306 -d mysql:8.0.31
 type MysqlClient struct {
 	db     *gorm.DB
 	logger *logrus.Logger

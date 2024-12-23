@@ -21,7 +21,7 @@ func TestAwsClient_RegTaskDef(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		{"test1", args{"faas_test", 1024, 3072, "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/faas-java-worker:1.0"}, false},
+		{"test1", args{"faas_test", 1024, 3072, "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/spike-java-worker:1.0"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

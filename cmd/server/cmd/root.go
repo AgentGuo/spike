@@ -6,8 +6,8 @@
 package cmd
 
 import (
-	"github.com/AgentGuo/faas/cmd/server/config"
-	"github.com/AgentGuo/faas/pkg/apiserver"
+	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/apiserver"
 	"os"
 
 	"github.com/spf13/cobra"

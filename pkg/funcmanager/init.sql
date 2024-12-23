@@ -1,2 +1,2 @@
-CREATE SCHEMA IF NOT EXISTS `faas` ;
-USE `faas` ;
+CREATE SCHEMA IF NOT EXISTS `spike` ;
+USE `spike` ;

@@ -1,12 +1,13 @@
-// protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/apiserver.proto
 syntax = "proto3";
 
-package faas;
+package spike;
 
-option go_package = "github.com/AgentGuo/faas/api";
+option java_package = "io.pixelsdb.pixels.spike.handler";
+option java_outer_classname = "SpikeServiceProto";
+option go_package = "github.com/AgentGuo/spike/api";
 
-// The faas service definition.
-service FaaS {
+// The spike service definition.
+service SpikeService {
   // Calls a function.
   rpc CallFunction(CallFunctionRequest) returns (CallFunctionResponse);
 

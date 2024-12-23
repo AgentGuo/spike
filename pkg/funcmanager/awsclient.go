@@ -8,9 +8,9 @@ package funcmanager
 import (
 	"context"
 	"fmt"
-	"github.com/AgentGuo/faas/cmd/server/config"
-	"github.com/AgentGuo/faas/pkg/logger"
-	"github.com/AgentGuo/faas/pkg/utils"
+	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/logger"
+	"github.com/AgentGuo/spike/pkg/utils"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -145,7 +145,7 @@ func (a *AwsClient) RegTaskDef(functionName string, cpu int32, memory int32, ima
 					LogDriver: types.LogDriverAwslogs,
 					Options: map[string]string{
 						"awslogs-region":        "cn-north-1",
-						"awslogs-group":         "pixels-worker-faas",
+						"awslogs-group":         "pixels-worker-spike",
 						"awslogs-stream-prefix": "ecs",
 					},
 					SecretOptions: nil,
