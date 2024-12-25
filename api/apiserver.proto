@@ -53,7 +53,6 @@ message ResourceSpec{
   int32 memory = 2;
   int32 min_replica = 3;
   int32 max_replica = 4;
-  bool enable_auto_scaling = 5;
 }
 
 // The request message for adding a new function.
@@ -115,7 +114,7 @@ message ResourceStatus{
   string private_ipv4 = 2;
   int32 cpu = 3;
   int32 memory = 4;
-  string launch_type = 5;
+  int32 launch_type = 5;
   string last_status = 6;
   string desired_status = 7;
 }

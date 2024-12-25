@@ -17,16 +17,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/sirupsen/logrus"
+	"sync"
+)
+
+type InstanceType int
+
+const (
+	EC2 InstanceType = iota
+	Fargate
+	FargateSpot
 )
 
 type AwsClient struct {
-	awsCfg         *aws.Config
-	ecsClient      *ecs.Client
-	ec2Client      *ec2.Client
-	cluster        string
-	subnets        []string
-	securityGroups []string
-	logger         *logrus.Logger
+	awsCfg            *aws.Config
+	ecsClient         *ecs.Client
+	ec2Client         *ec2.Client
+	cluster           string
+	subnets           []string
+	securityGroups    []string
+	logger            *logrus.Logger
+	CapacityProviders map[InstanceType]string
 }
 
 func NewAwsClient() *AwsClient {
@@ -39,55 +49,111 @@ func NewAwsClient() *AwsClient {
 		awsCfg:         &cfg,
 		ecsClient:      ecs.NewFromConfig(cfg),
 		ec2Client:      ec2.NewFromConfig(cfg),
-		cluster:        config.GetConfig().AwsFassCluster,
+		cluster:        config.GetConfig().AwsCluster,
 		subnets:        config.GetConfig().AwsSubnets,
 		securityGroups: config.GetConfig().AwsSecurityGroups,
 		logger:         logger.GetLogger(),
+		CapacityProviders: map[InstanceType]string{
+			EC2:         config.GetConfig().EC2Provider,
+			Fargate:     "FARGATE",
+			FargateSpot: "FARGATE_SPOT",
+		},
 	}
 }
 
-func (a *AwsClient) CreateECS(familyName string, revision int32, replicas int32) (string, error) {
-	serviceName := fmt.Sprintf("%s_v%d", familyName, revision)
+func (a *AwsClient) GenServiceName(awsFamilyName string) string {
+	return fmt.Sprintf("%s_%d", awsFamilyName, utils.GetSonyFlakeInstance().GenerateID())
+}
+
+func (a *AwsClient) BatchCreateInstance(awsFamilyName string, awsRevision int32, instanceType InstanceType, replicas int32) ([]string, error) {
+	var wg sync.WaitGroup
+	awsServiceNames := make([]string, replicas)
+	errors := make([]error, replicas)
+
+	for i := int32(0); i < replicas; i++ {
+		wg.Add(1)
+		go func(index int32) {
+			defer wg.Done()
+			awsServiceName, err := a.CreateInstance(awsFamilyName, awsRevision, instanceType)
+			awsServiceNames[index] = awsServiceName
+			errors[index] = err
+		}(i)
+	}
+
+	wg.Wait()
+	var retErr error
+	for _, err := range errors {
+		if err != nil {
+			retErr = fmt.Errorf("failed to create some instances: %v", errors)
+		}
+	}
+	if retErr != nil {
+		for i, err := range errors {
+			if err != nil {
+				if delErr := a.DeleteInstance(awsServiceNames[i]); delErr != nil {
+					a.logger.Errorf("failed to delete instance %s, err: %v", awsServiceNames[i], delErr)
+				}
+			}
+		}
+		return nil, retErr
+	}
+	return awsServiceNames, nil
+}
+
+// CreateInstance 为了方便管理，避免出现热实例缩容的情况，所以创建一个一个service，
+// 而不是一个service下创建多个replicas，这样可以准确控制扩缩容的实例
+func (a *AwsClient) CreateInstance(awsFamilyName string, awsRevision int32, instanceType InstanceType) (string, error) {
+	awsServiceName := a.GenServiceName(awsFamilyName)
+	assignPublicIp := types.AssignPublicIpEnabled
+	if instanceType == EC2 {
+		assignPublicIp = types.AssignPublicIpDisabled
+	}
 	output, err := a.ecsClient.CreateService(context.TODO(), &ecs.CreateServiceInput{
-		ServiceName:    aws.String(serviceName),
+		ServiceName: aws.String(awsServiceName),
+		CapacityProviderStrategy: []types.CapacityProviderStrategyItem{
+			{
+				CapacityProvider: aws.String(a.CapacityProviders[instanceType]),
+				Base:             0,
+				Weight:           1,
+			},
+		},
 		Cluster:        aws.String(a.cluster),
-		DesiredCount:   aws.Int32(replicas),
-		TaskDefinition: aws.String(fmt.Sprintf("%s:%d", familyName, revision)),
-		//LaunchType:     types.LaunchTypeFargate,
-		//LaunchType: types.LaunchTypeEc2,
+		DesiredCount:   aws.Int32(1),
+		TaskDefinition: aws.String(fmt.Sprintf("%s:%d", awsFamilyName, awsRevision)),
 		NetworkConfiguration: &types.NetworkConfiguration{
 			AwsvpcConfiguration: &types.AwsVpcConfiguration{
 				Subnets:        a.subnets,
-				AssignPublicIp: types.AssignPublicIpEnabled,
+				AssignPublicIp: assignPublicIp,
 				SecurityGroups: a.securityGroups,
 			},
 		},
 	})
 	if err != nil {
-		a.logger.Errorf("failed to create ECS, err: %v, resp: %s", err, utils.GetJson(output))
+		a.logger.Errorf("failed to create instance, err: %v, resp: %s", err, utils.GetJson(output))
 		return "", err
 	}
-	a.logger.Debugf("create ECS success, resp: %s", utils.GetJson(output))
-	return serviceName, nil
+	a.logger.Debugf("create instance success, resp: %s", utils.GetJson(output))
+	return awsServiceName, nil
 }
 
-func (a *AwsClient) UpdateECSReplicas(serviceName string, replicas int32) error {
-	output, err := a.ecsClient.UpdateService(context.TODO(), &ecs.UpdateServiceInput{
-		Service:      aws.String(serviceName),
-		Cluster:      aws.String(a.cluster),
-		DesiredCount: aws.Int32(replicas),
+func (a *AwsClient) DeleteInstance(awsServiceName string) error {
+	output, err := a.ecsClient.DeleteService(context.TODO(), &ecs.DeleteServiceInput{
+		Service: aws.String(awsServiceName),
+		Cluster: aws.String(a.cluster),
+		Force:   aws.Bool(true),
 	})
 	if err != nil {
-		a.logger.Errorf("failed to update ECS replicas, err: %v, resp: %#v", err, output)
+		a.logger.Errorf("failed to delete ECS, err: %v, resp: %#v", err, output)
+		return err
 	}
-	a.logger.Debugf("update ECS replicas success, resp: %#v", output)
+	a.logger.Debugf("delete ECS success, resp: %#v", output)
 	return nil
 }
 
-func (a *AwsClient) GetAllTasks(serviceName string) ([]string, error) {
+func (a *AwsClient) GetAllTasks(awsServiceName string) ([]string, error) {
 	listTaskOutput, err := a.ecsClient.ListTasks(context.TODO(), &ecs.ListTasksInput{
 		Cluster:     aws.String(a.cluster),
-		ServiceName: aws.String(serviceName),
+		ServiceName: aws.String(awsServiceName),
 	})
 	if err != nil {
 		a.logger.Error(err)
@@ -112,20 +178,6 @@ func (a *AwsClient) DescribeTasks(tasks []string) (*ecs.DescribeTasksOutput, err
 	return output, nil
 }
 
-func (a *AwsClient) DeleteECS(serviceName string) error {
-	output, err := a.ecsClient.DeleteService(context.TODO(), &ecs.DeleteServiceInput{
-		Service: aws.String(serviceName),
-		Cluster: aws.String(a.cluster),
-		Force:   aws.Bool(true),
-	})
-	if err != nil {
-		a.logger.Errorf("failed to delete ECS, err: %v, resp: %#v", err, output)
-		return err
-	}
-	a.logger.Debugf("delete ECS success, resp: %#v", output)
-	return nil
-}
-
 func (a *AwsClient) RegTaskDef(functionName string, cpu int32, memory int32, imageUrl string) (string, int32, error) {
 	output, err := a.ecsClient.RegisterTaskDefinition(context.TODO(), &ecs.RegisterTaskDefinitionInput{
 		ContainerDefinitions: []types.ContainerDefinition{
@@ -133,7 +185,7 @@ func (a *AwsClient) RegTaskDef(functionName string, cpu int32, memory int32, ima
 				Image:  aws.String(imageUrl),
 				Cpu:    cpu,
 				Memory: aws.Int32(memory),
-				Name:   aws.String("faas_worker"),
+				Name:   aws.String("spike_worker"),
 				PortMappings: []types.PortMapping{{
 					AppProtocol:   types.ApplicationProtocolGrpc,
 					ContainerPort: aws.Int32(50052),

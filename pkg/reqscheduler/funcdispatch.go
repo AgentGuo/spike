@@ -3,7 +3,7 @@
 @since: 2024/11/17
 @desc: desc
 */
-package funcdispatch
+package reqscheduler
 
 import (
 	"context"
@@ -27,25 +27,25 @@ type Request struct {
 	Payload string
 }
 
-type FuncDispatch struct {
-	mysqlClient *storage.MysqlClient
+type ReqScheduler struct {
+	mysqlClient *storage.Mysql
 	logger      *logrus.Logger
 }
 
-func NewFuncDispatch() *FuncDispatch {
-	mysqlClient := storage.NewMysqlClient()
-	return &FuncDispatch{
+func NewReqScheduler() *ReqScheduler {
+	mysqlClient := storage.NewMysql()
+	return &ReqScheduler{
 		mysqlClient: mysqlClient,
 		logger:      logger.GetLogger(),
 	}
 }
 
-func (f *FuncDispatch) AddRequest(req *api.CallFunctionRequest) {
+func (f *ReqScheduler) AddRequest(req *api.CallFunctionRequest) {
 	// TODO
 }
 
-func (f *FuncDispatch) CallFunction(req *api.CallFunctionRequest) (*api.CallFunctionResponse, error) {
-	taskData, err := f.mysqlClient.GetFuncTaskDataByCondition(map[string]interface{}{
+func (f *ReqScheduler) CallFunction(req *api.CallFunctionRequest) (*api.CallFunctionResponse, error) {
+	taskData, err := f.mysqlClient.GetFuncInstanceByCondition(map[string]interface{}{
 		"function_name": req.FunctionName,
 		"cpu":           req.Cpu,
 		"memory":        req.Memory,

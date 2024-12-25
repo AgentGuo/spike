@@ -19,7 +19,7 @@
 *.out
 
 build/*.log
-build/faas-server
+build/spike-server
 
 # Dependency directories (remove the comment below to include it)
 # vendor/

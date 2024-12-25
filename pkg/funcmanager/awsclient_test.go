@@ -21,58 +21,13 @@ func TestAwsClient_RegTaskDef(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		{"test1", args{"faas_test", 1024, 3072, "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/spike-java-worker:1.0"}, false},
+		{"test1", args{"spike_test", 1024, 3072, "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/spike-java-worker:1.0"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := NewAwsClient()
 			if _, _, err := a.RegTaskDef(tt.args.functionName, tt.args.cpu, tt.args.memory, tt.args.imageUrl); (err != nil) != tt.wantErr {
 				t.Errorf("RegTaskDef() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestAwsClient_CreateESC(t *testing.T) {
-	type args struct {
-		familyName string
-		revision   int32
-		replicas   int32
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{"test1", args{"faas_test", 1, 1}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			a := NewAwsClient()
-			if _, err := a.CreateECS(tt.args.familyName, tt.args.revision, tt.args.replicas); (err != nil) != tt.wantErr {
-				t.Errorf("CreateECS() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestAwsClient_UpdateECSReplicas(t *testing.T) {
-	type args struct {
-		serviceName string
-		replicas    int32
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{"test1", args{"faas_test_v1", 2}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			a := NewAwsClient()
-			if err := a.UpdateECSReplicas(tt.args.serviceName, tt.args.replicas); (err != nil) != tt.wantErr {
-				t.Errorf("UpdateECSReplicas() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -87,7 +42,9 @@ func TestAwsClient_GetAllTasks(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		{"test1", args{"test_v14"}, false},
+		{"test_fargate", args{"pixels-worker-spike_546127393488676365"}, false},
+		{"test_fargate_spot", args{"pixels-worker-spike_546127394595972621"}, false},
+		{"test_ec2", args{"pixels-worker-spike_546127776462185997"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -116,7 +73,9 @@ func TestAwsClient_DescribeDescribeNetworkInterfaces(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		{"test1", args{"eni-0580f1a35d9335b77"}, false},
+		{"test_fargate", args{"eni-0aa95680207aef0b9"}, false},
+		{"test_fargate_spot", args{"eni-0899dd3c4119a3791"}, false},
+		{"test_ec2", args{"eni-058b42ef82434c04e"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -126,6 +85,34 @@ func TestAwsClient_DescribeDescribeNetworkInterfaces(t *testing.T) {
 			} else {
 				t.Log(got)
 			}
+		})
+	}
+}
+
+func TestAwsClient_CreateInstance(t *testing.T) {
+	type args struct {
+		familyName   string
+		revision     int32
+		instanceType InstanceType
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{"test1", args{"pixels-worker-spike", 6, EC2}, false},
+		{"test2", args{"pixels-worker-spike", 6, Fargate}, false},
+		{"test3", args{"pixels-worker-spike", 6, FargateSpot}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := NewAwsClient()
+			got, err := a.CreateInstance(tt.args.familyName, tt.args.revision, tt.args.instanceType)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateInstance() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			t.Logf("CreateInstance() got = %v", got)
 		})
 	}
 }

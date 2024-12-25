@@ -23,8 +23,10 @@ type ServerConfig struct {
 	ServerPort        int      `yaml:"server_port"`
 	MysqlDsn          string   `yaml:"mysql_dsn"`
 	LogLevel          string   `yaml:"log_level"`
-	AwsFassCluster    string   `yaml:"aws_fass_cluster"`
+	LogToFile         bool     `yaml:"log_to_file"`
+	AwsCluster        string   `yaml:"aws_cluster"`
 	AwsSubnets        []string `yaml:"aws_subnets"`
+	EC2Provider       string   `yaml:"ec2_provider"`
 	AwsSecurityGroups []string `yaml:"aws_security_groups"`
 	TaskRole          string   `yaml:"task_role"`
 	DispatchTimeout   int      `yaml:"dispatch_timeout"`
@@ -38,11 +40,17 @@ func SetConfigPath(path string) {
 func GetConfig() *ServerConfig {
 	configOnce.Do(func() {
 		configInstance = &ServerConfig{
-			ServerIp:       "127.0.0.1",
-			ServerPort:     13306,
-			MysqlDsn:       "root:faaspassword@tcp(127.0.0.1:3306)/spike",
-			LogLevel:       "info",
-			AwsFassCluster: "fass_cluster",
+			ServerIp:          "127.0.0.1",
+			ServerPort:        13306,
+			MysqlDsn:          "root:spikepassword@tcp(127.0.0.1:3306)/spike?charset=utf8mb4&parseTime=True&loc=Local",
+			LogLevel:          "debug",
+			LogToFile:         false,
+			AwsCluster:        "spike_cluster_mini",
+			AwsSubnets:        []string{"subnet-01930cb57dbc12f7e", "subnet-0c77aae8c226d039c", "subnet-02bd39d1f8b337c22"},
+			EC2Provider:       "Infra-ECS-Cluster-spikeclustermini-d985e674-EC2CapacityProvider-FufGynLGFE0q",
+			AwsSecurityGroups: []string{"sg-02221dbcd555d5277"},
+			TaskRole:          "PixelsFaaSRole",
+			DispatchTimeout:   20,
 		}
 		if configPath != "" {
 			if fileContent, e := os.ReadFile(configPath); e == nil {

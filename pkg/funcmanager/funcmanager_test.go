@@ -24,11 +24,10 @@ func TestFuncManager_CreateFunction(t *testing.T) {
 			FunctionName: "test",
 			ImageUrl:     "013072238852.dkr.ecr.cn-north-1.amazonaws.com.cn/agentguo/spike-java-worker:1.0",
 			Resources: []*api.ResourceSpec{{
-				Cpu:               1024,
-				Memory:            3072,
-				MinReplica:        2,
-				MaxReplica:        5,
-				EnableAutoScaling: false,
+				Cpu:        1024,
+				Memory:     3072,
+				MinReplica: 2,
+				MaxReplica: 5,
 			}},
 		}}, false},
 	}

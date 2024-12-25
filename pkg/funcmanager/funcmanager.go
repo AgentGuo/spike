@@ -10,6 +10,7 @@ import (
 	"github.com/AgentGuo/spike/api"
 	"github.com/AgentGuo/spike/pkg/logger"
 	"github.com/AgentGuo/spike/pkg/storage"
+	"github.com/AgentGuo/spike/pkg/storage/model"
 	"github.com/sirupsen/logrus"
 	"strconv"
 	"sync"
@@ -17,9 +18,9 @@ import (
 )
 
 type FuncManager struct {
-	awsClient   *AwsClient
-	mysqlClient *storage.MysqlClient
-	logger      *logrus.Logger
+	awsClient *AwsClient
+	mysql     *storage.Mysql
+	logger    *logrus.Logger
 }
 
 var (
@@ -30,9 +31,9 @@ var (
 func NewFuncManager() *FuncManager {
 	once.Do(func() {
 		funcManager = &FuncManager{
-			awsClient:   NewAwsClient(),
-			mysqlClient: storage.NewMysqlClient(),
-			logger:      logger.GetLogger(),
+			awsClient: NewAwsClient(),
+			mysql:     storage.NewMysql(),
+			logger:    logger.GetLogger(),
 		}
 	})
 	return funcManager
@@ -40,7 +41,7 @@ func NewFuncManager() *FuncManager {
 
 func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 	// step1: check if function has been created
-	if hasCreated, err := funcManager.mysqlClient.HasFuncMetaDataByFunctionName(req.FunctionName); err != nil || hasCreated {
+	if hasCreated, err := funcManager.mysql.HasFuncMetaDataByFunctionName(req.FunctionName); err != nil || hasCreated {
 		if hasCreated {
 			return fmt.Errorf("function has been created")
 		} else {
@@ -48,25 +49,42 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 		}
 	}
 
-	// step2: create task definition
-	var resourceSpecList []storage.ResourceSpec
+	// step2: create function definition
+	var resourceSpecList []model.ResourceSpec
 	for _, res := range req.Resources {
-		family, revision, err := f.awsClient.RegTaskDef(req.FunctionName, res.Cpu, res.Memory, req.ImageUrl)
-		if err != nil {
-			return err
+		var family string
+		var revision int32
+		if awsTaskDef, err := f.mysql.GetAwsTaskDefByFuncCpuMenImg(req.FunctionName, res.Cpu, res.Memory, req.ImageUrl); err == nil && awsTaskDef != nil {
+			family = awsTaskDef.TaskFamily
+			revision = awsTaskDef.TaskRevision
+		} else {
+			family, revision, err = f.awsClient.RegTaskDef(req.FunctionName, res.Cpu, res.Memory, req.ImageUrl)
+			if err != nil {
+				return err
+			}
+			updateTaskDef := &model.AwsTaskDef{
+				TaskFamily:   family,
+				TaskRevision: revision,
+				FunctionName: req.FunctionName,
+				Cpu:          res.Cpu,
+				Memory:       res.Memory,
+				ImageUrl:     req.ImageUrl,
+			}
+			err = f.mysql.UpdateAwsTaskDef(updateTaskDef)
+			if err != nil {
+				f.logger.Errorf("update aws task def failed, err: %v", err)
+			}
 		}
-		resourceSpecList = append(resourceSpecList, storage.ResourceSpec{
-			Cpu:               res.Cpu,
-			Memory:            res.Memory,
-			MinReplica:        res.MinReplica,
-			MaxReplica:        res.MaxReplica,
-			EnableAutoScaling: res.EnableAutoScaling,
-			ServiceName:       fmt.Sprintf("%s_v%d", family, revision),
-			Family:            family,
-			Revision:          revision,
+		resourceSpecList = append(resourceSpecList, model.ResourceSpec{
+			Cpu:        res.Cpu,
+			Memory:     res.Memory,
+			MinReplica: res.MinReplica,
+			MaxReplica: res.MaxReplica,
+			Family:     family,
+			Revision:   revision,
 		})
 	}
-	err := funcManager.mysqlClient.CreateFuncMetaData(&storage.FuncMetaData{
+	err := funcManager.mysql.CreateFuncMetaData(&model.FuncMetaData{
 		FunctionName: req.FunctionName,
 		ImageUrl:     req.ImageUrl,
 		ResSpecList:  resourceSpecList,
@@ -76,124 +94,139 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 		return err
 	}
 
-	// step3: create task
+	// step3: create function instance
+	var funcInstances []model.FuncInstance
 	for _, res := range resourceSpecList {
-		if _, err := f.awsClient.CreateECS(res.Family, res.Revision, res.MinReplica); err != nil {
+		awsServiceNames, err := f.awsClient.BatchCreateInstance(res.Family, res.Revision, EC2, res.MinReplica)
+		if err != nil {
 			f.logger.Errorf("create ecs failed, err: %v", err)
 			return err
 		}
+		for _, awsServiceName := range awsServiceNames {
+			funcInstances = append(funcInstances, model.FuncInstance{
+				AwsServiceName: awsServiceName,
+				FunctionName:   req.FunctionName,
+				Cpu:            res.Cpu,
+				Memory:         res.Memory,
+				AwsFamily:      res.Family,
+				AwsRevision:    res.Revision,
+				LastStatus:     "NOT_CREATE",
+				LaunchType:     int32(EC2),
+			})
+		}
 	}
-	go f.UpdateTaskStatusRoutine(req.FunctionName)
+	if err := f.mysql.UpdateFuncInstanceBatch(funcInstances); err != nil {
+		f.logger.Errorf("UpdateFuncInstanceBatch failed, err: %v", err)
+		return err
+	}
+	go f.UpdateFunctionStatus(req.FunctionName)
 	return nil
 }
 
-func (f *FuncManager) UpdateTaskStatusRoutine(functionName string) {
+func (f *FuncManager) UpdateFunctionStatus(functionName string) {
 	startTime := time.Now()
+
 	for {
-		funcMeta, err := f.mysqlClient.GetFuncMetaDataByFunctionName(functionName)
+		funcInstances, err := f.mysql.GetFuncInstanceByFunctionName(functionName)
 		if err != nil {
 			return
 		}
-		if isAllReady, err := f.UpdateTaskStatus(funcMeta); err != nil {
-			f.logger.Errorf("update task status failed, err: %v", err)
-		} else if isAllReady {
+		if isAllReady := f.UpdateFuncInstancesStatus(funcInstances); isAllReady {
 			elapsedTime := time.Since(startTime).Seconds()
 			f.logger.Infof("%s's all task is ready, cost time: %fs", functionName, elapsedTime)
 			return
 		}
 		time.Sleep(time.Second)
 	}
+
 }
-
-func (f *FuncManager) UpdateTaskStatus(metaData *storage.FuncMetaData) (bool, error) {
+func (f *FuncManager) UpdateFuncInstancesStatus(funcInstances []model.FuncInstance) bool {
+	// step1: 检查是否所有实例已经就绪
 	isAllReady := true
-	for _, resSpec := range metaData.ResSpecList {
-		// step1: get tasks status
-		tasks, err := f.awsClient.GetAllTasks(resSpec.ServiceName)
-		if err != nil {
-			return false, err
-		}
-		output, err := f.awsClient.DescribeTasks(tasks)
-		if err != nil {
-			return false, err
-		}
-
-		// step2: update tasks status
-		var updateTask []storage.FuncTaskData
-		if output == nil || output.Tasks == nil {
-			if resSpec.MinReplica != 0 {
-				isAllReady = false
-			}
-			continue
-		}
-		for _, task := range output.Tasks {
-			cpu, _ := strconv.Atoi(*task.Cpu)
-			memory, _ := strconv.Atoi(*task.Memory)
-			publicIpv4, privateIpv4 := "", ""
-			if task.Attachments != nil && len(task.Attachments) != 0 {
-				for _, d := range task.Attachments[0].Details {
-					if d.Name != nil && *d.Name == "networkInterfaceId" {
-						publicIpv4, _ = f.awsClient.GetPublicIpv4(*d.Value)
-					}
-					if d.Name != nil && *d.Name == "privateIPv4Address" {
-						privateIpv4 = *d.Value
-					}
-				}
-			}
-			updateTask = append(updateTask, storage.FuncTaskData{
-				TaskArn:       *task.TaskArn,
-				ServiceName:   resSpec.ServiceName,
-				FunctionName:  metaData.FunctionName,
-				PrivateIpv4:   privateIpv4,
-				PublicIpv4:    publicIpv4,
-				Cpu:           int32(cpu),
-				Memory:        int32(memory),
-				Family:        resSpec.Family,
-				Revision:      resSpec.Revision,
-				LastStatus:    *task.LastStatus,
-				DesiredStatus: *task.DesiredStatus,
-				LaunchType:    string(task.LaunchType),
-			})
-			if *task.LastStatus != *task.DesiredStatus {
-				isAllReady = false
-			}
-		}
-		if int32(len(output.Tasks)) < resSpec.MinReplica {
+	var taskList []string
+	taskMap := make(map[string]int)
+	for i, instance := range funcInstances {
+		if instance.LastStatus != instance.DesiredStatus {
 			isAllReady = false
-		}
-		currentTask, err := f.mysqlClient.GetFuncTaskDataByServiceName(resSpec.ServiceName)
-		if err != nil {
-			return false, err
-		}
-		if len(currentTask) > len(updateTask) {
-			_ = f.mysqlClient.DeleteFuncTaskDataServiceName(resSpec.ServiceName)
-		}
-		if err := f.mysqlClient.UpdateFuncTaskDataBatch(updateTask); err != nil {
-			return false, err
+			tasks, err := f.awsClient.GetAllTasks(instance.AwsServiceName)
+			if err != nil {
+				f.logger.Errorf("get %s's all tasks failed, err: %v", instance.AwsServiceName, err)
+				continue
+			}
+			if tasks == nil || len(tasks) != 1 {
+				funcInstances[i].LastStatus = "NOT_CREATED"
+			} else {
+				taskList = append(taskList, tasks[0])
+				taskMap[tasks[0]] = i
+			}
 		}
 	}
-	return isAllReady, nil
+	if isAllReady {
+		return isAllReady
+	} else if len(taskList) == 0 {
+		// task not created
+		return false
+	}
+
+	// step2: 未就绪的实例获取更新当前状态
+	output, err := f.awsClient.DescribeTasks(taskList)
+	if err != nil {
+		f.logger.Errorf("describe tasks failed, taskList: %v, err: %v", taskList, err)
+		return false
+	}
+	for _, task := range output.Tasks {
+		cpu, _ := strconv.Atoi(*task.Cpu)
+		memory, _ := strconv.Atoi(*task.Memory)
+		publicIpv4, privateIpv4 := "", ""
+		if task.Attachments != nil && len(task.Attachments) != 0 {
+			for _, d := range task.Attachments[0].Details {
+				if d.Name != nil && *d.Name == "networkInterfaceId" {
+					publicIpv4, _ = f.awsClient.GetPublicIpv4(*d.Value)
+				}
+				if d.Name != nil && *d.Name == "privateIPv4Address" {
+					privateIpv4 = *d.Value
+				}
+			}
+		}
+		instanceIdx := taskMap[*task.TaskArn]
+		funcInstances[instanceIdx].AwsTaskArn = *task.TaskArn
+		funcInstances[instanceIdx].PrivateIpv4 = privateIpv4
+		funcInstances[instanceIdx].PublicIpv4 = publicIpv4
+		funcInstances[instanceIdx].Cpu = int32(cpu)
+		funcInstances[instanceIdx].Memory = int32(memory)
+		funcInstances[instanceIdx].LastStatus = *task.LastStatus
+		funcInstances[instanceIdx].DesiredStatus = *task.DesiredStatus
+	}
+	if err := f.mysql.UpdateFuncInstanceBatch(funcInstances); err != nil {
+		f.logger.Errorf("update task status failed, err: %v", err)
+	}
+	return false
 }
 
 func (f *FuncManager) DeleteFunction(req *api.DeleteFunctionRequest) error {
-	//step1: get funcMetaData
-	funcMetaData, err := funcManager.mysqlClient.GetFuncMetaDataByFunctionName(req.FunctionName)
+	//step1: check function exist
+	_, err := f.mysql.GetFuncMetaDataByFunctionName(req.FunctionName)
 	if err != nil {
 		f.logger.Errorf("get func meta data failed, functionName: %s, err: %v", req.FunctionName, err)
 		return err
 	}
+	funcInstances, err := f.mysql.GetFuncInstanceByFunctionName(req.FunctionName)
+	if err != nil {
+		f.logger.Errorf("get func instance failed, functionName: %s, err: %v", req.FunctionName, err)
+		return err
+	}
 
 	//step2: delete task
-	for _, resSpec := range funcMetaData.ResSpecList {
-		if err := f.awsClient.DeleteECS(resSpec.ServiceName); err != nil {
-			f.logger.Errorf("delete ecs failed, serviceName: %s, err: %v", resSpec.ServiceName, err)
+	for _, instance := range funcInstances {
+		if err := f.awsClient.DeleteInstance(instance.AwsServiceName); err != nil {
+			f.logger.Errorf("delete ecs failed, serviceName: %s, err: %v", instance.AwsServiceName, err)
 		}
 	}
-	err = f.mysqlClient.DeleteFuncTaskDataFunctionName(req.FunctionName)
+	err = f.mysql.DeleteFuncInstanceFunctionName(req.FunctionName)
 	if err != nil {
 		f.logger.Errorf("mysql DeleteFuncTaskDataServiceName failed, err:%v", err)
 	}
-	err = f.mysqlClient.DeleteFuncMetaDataByFunctionName(req.FunctionName)
+	err = f.mysql.DeleteFuncMetaDataByFunctionName(req.FunctionName)
 	if err != nil {
 		f.logger.Errorf("mysql DeleteFuncTaskDataServiceName failed, err:%v", err)
 	}
@@ -201,7 +234,7 @@ func (f *FuncManager) DeleteFunction(req *api.DeleteFunctionRequest) error {
 }
 
 func (f *FuncManager) GetAllFunction() (*api.GetAllFunctionsResponse, error) {
-	FuncMetaDataList, err := f.mysqlClient.GetFuncMetaDataByCondition(map[string]interface{}{})
+	FuncMetaDataList, err := f.mysql.GetFuncMetaDataByCondition(map[string]interface{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -210,11 +243,10 @@ func (f *FuncManager) GetAllFunction() (*api.GetAllFunctionsResponse, error) {
 		var resSpecList []*api.ResourceSpec
 		for _, res := range data.ResSpecList {
 			resSpecList = append(resSpecList, &api.ResourceSpec{
-				Cpu:               res.Cpu,
-				Memory:            res.Memory,
-				MinReplica:        res.MinReplica,
-				MaxReplica:        res.MaxReplica,
-				EnableAutoScaling: res.EnableAutoScaling,
+				Cpu:        res.Cpu,
+				Memory:     res.Memory,
+				MinReplica: res.MinReplica,
+				MaxReplica: res.MaxReplica,
 			})
 		}
 		resp.Functions = append(resp.Functions, &api.FunctionMetaData{
@@ -227,7 +259,7 @@ func (f *FuncManager) GetAllFunction() (*api.GetAllFunctionsResponse, error) {
 }
 
 func (f *FuncManager) GetFunctionResources(req *api.GetFunctionResourcesRequest) (*api.GetFunctionResourcesResponse, error) {
-	taskDataList, err := f.mysqlClient.GetFuncTaskDataByFunctionName(req.FunctionName)
+	taskDataList, err := f.mysql.GetFuncInstanceByFunctionName(req.FunctionName)
 	if err != nil {
 		return nil, err
 	}

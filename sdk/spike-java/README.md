@@ -33,7 +33,7 @@ docker buildx build --build-arg HANDLER_JAR_FILE=spike-java-handler/target/spike
 
 [//]: # (```bash)
 
-[//]: # (docker run -d -p 50052:50052 faas-java-worker:1.0)
+[//]: # (docker run -d -p 50052:50052 spike-java-worker:1.0)
 
 [//]: # ()
 [//]: # (docker exec -it <container_id> /bin/bash)

@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"github.com/AgentGuo/spike/api"
 	"github.com/AgentGuo/spike/cmd/server/config"
-	"github.com/AgentGuo/spike/pkg/funcdispatch"
 	"github.com/AgentGuo/spike/pkg/funcmanager"
 	"github.com/AgentGuo/spike/pkg/logger"
+	"github.com/AgentGuo/spike/pkg/reqscheduler"
 	"github.com/sirupsen/logrus"
 	"log"
 	"net"
@@ -25,7 +25,7 @@ type server struct {
 	logger *logrus.Logger
 	api.UnimplementedSpikeServiceServer
 	funcManager  *funcmanager.FuncManager
-	funcDispatch *funcdispatch.FuncDispatch
+	funcDispatch *reqscheduler.ReqScheduler
 }
 
 func (s *server) CallFunction(ctx context.Context, req *api.CallFunctionRequest) (*api.CallFunctionResponse, error) {
@@ -75,7 +75,7 @@ func StartApiServer() {
 	api.RegisterSpikeServiceServer(grpcServer, &server{
 		logger:       logger.GetLogger(),
 		funcManager:  funcmanager.NewFuncManager(),
-		funcDispatch: funcdispatch.NewFuncDispatch(),
+		funcDispatch: reqscheduler.NewReqScheduler(),
 	})
 
 	// Register reflection service on gRPC server.
