@@ -3,6 +3,7 @@ module github.com/AgentGuo/spike
 go 1.21
 
 require (
+	github.com/Workiva/go-datastructures v1.1.5
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/config v1.28.1
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.189.0

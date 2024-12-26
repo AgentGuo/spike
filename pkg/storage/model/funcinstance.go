@@ -10,7 +10,7 @@ import "gorm.io/gorm"
 type FuncInstance struct {
 	gorm.Model
 	AwsServiceName string `gorm:"primaryKey;column:aws_service_name;index:idx_service_name"`
-	AwsTaskArn     string `gorm:"column:aws_task_arn;unique;index:idx_task_arn"`
+	AwsTaskArn     string `gorm:"column:aws_task_arn;index:idx_task_arn"`
 	FunctionName   string `gorm:"column:function_name;index:idx_function_name"`
 	PrivateIpv4    string `gorm:"column:private_ipv4"`
 	PublicIpv4     string `gorm:"column:public_ipv4"`

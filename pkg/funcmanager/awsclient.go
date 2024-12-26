@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/sirupsen/logrus"
+	"github.com/sony/sonyflake"
 	"sync"
 )
 
@@ -37,6 +38,7 @@ type AwsClient struct {
 	securityGroups    []string
 	logger            *logrus.Logger
 	CapacityProviders map[InstanceType]string
+	flake             *sonyflake.Sonyflake
 }
 
 func NewAwsClient() *AwsClient {
@@ -58,11 +60,16 @@ func NewAwsClient() *AwsClient {
 			Fargate:     "FARGATE",
 			FargateSpot: "FARGATE_SPOT",
 		},
+		flake: sonyflake.NewSonyflake(sonyflake.Settings{}),
 	}
 }
 
 func (a *AwsClient) GenServiceName(awsFamilyName string) string {
-	return fmt.Sprintf("%s_%d", awsFamilyName, utils.GetSonyFlakeInstance().GenerateID())
+	id, err := a.flake.NextID()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to generate ID: %v", err))
+	}
+	return fmt.Sprintf("%s_%d", awsFamilyName, id)
 }
 
 func (a *AwsClient) BatchCreateInstance(awsFamilyName string, awsRevision int32, instanceType InstanceType, replicas int32) ([]string, error) {

@@ -97,7 +97,8 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 	// step3: create function instance
 	var funcInstances []model.FuncInstance
 	for _, res := range resourceSpecList {
-		awsServiceNames, err := f.awsClient.BatchCreateInstance(res.Family, res.Revision, EC2, res.MinReplica)
+		// TODO: test only
+		awsServiceNames, err := f.awsClient.BatchCreateInstance(res.Family, res.Revision, Fargate, res.MinReplica)
 		if err != nil {
 			f.logger.Errorf("create ecs failed, err: %v", err)
 			return err
@@ -111,7 +112,8 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 				AwsFamily:      res.Family,
 				AwsRevision:    res.Revision,
 				LastStatus:     "NOT_CREATE",
-				LaunchType:     int32(EC2),
+				//LaunchType:     int32(EC2),
+				LaunchType: int32(Fargate), // TODO: test only
 			})
 		}
 	}

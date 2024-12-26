@@ -11,10 +11,10 @@ service SpikeWorkerService {
 
 message CallWorkerFunctionReq {
   string payload = 1;
-  string requestId = 2;
+  uint64 requestId = 2;
 }
 
 message CallWorkerFunctionResp {
   string payload = 1;
-  string requestId = 2;
+  uint64 requestId = 2;
 }

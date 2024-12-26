@@ -61,6 +61,9 @@ func initMysql(dsn string) error {
 	if err := db.AutoMigrate(&model.AwsTaskDef{}); err != nil {
 		return err
 	}
+	if err := db.AutoMigrate(&model.ReqScheduleInfo{}); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -185,5 +188,17 @@ func (m *Mysql) GetAwsTaskDefByFuncCpuMenImg(functionName string, cpu int32, mem
 }
 
 func (m *Mysql) UpdateAwsTaskDef(data *model.AwsTaskDef) error {
+	return m.db.Save(data).Error
+}
+
+func (m *Mysql) GetReqScheduleInfoByFunctionName(functionName string) ([]model.ReqScheduleInfo, error) {
+	var data []model.ReqScheduleInfo
+	return data, m.db.Where(map[string]interface{}{"function_name": functionName}).Find(&data).Error
+}
+func (m *Mysql) DeleteReqScheduleInfo(requestID uint64) error {
+	return m.db.Unscoped().Where(map[string]interface{}{"req_id": requestID}).Delete(&model.ReqScheduleInfo{}).Error
+}
+
+func (m *Mysql) UpdateReqScheduleInfo(data *model.ReqScheduleInfo) error {
 	return m.db.Save(data).Error
 }
