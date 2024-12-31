@@ -24,6 +24,7 @@ const (
 	SpikeService_DeleteFunction_FullMethodName       = "/spike.SpikeService/DeleteFunction"
 	SpikeService_GetAllFunctions_FullMethodName      = "/spike.SpikeService/GetAllFunctions"
 	SpikeService_GetFunctionResources_FullMethodName = "/spike.SpikeService/GetFunctionResources"
+	SpikeService_ScaleFunction_FullMethodName        = "/spike.SpikeService/ScaleFunction"
 )
 
 // SpikeServiceClient is the client API for SpikeService service.
@@ -40,6 +41,7 @@ type SpikeServiceClient interface {
 	DeleteFunction(ctx context.Context, in *DeleteFunctionRequest, opts ...grpc.CallOption) (*DeleteFunctionResponse, error)
 	GetAllFunctions(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetAllFunctionsResponse, error)
 	GetFunctionResources(ctx context.Context, in *GetFunctionResourcesRequest, opts ...grpc.CallOption) (*GetFunctionResourcesResponse, error)
+	ScaleFunction(ctx context.Context, in *ScaleFunctionRequest, opts ...grpc.CallOption) (*Empty, error)
 }
 
 type spikeServiceClient struct {
@@ -100,6 +102,16 @@ func (c *spikeServiceClient) GetFunctionResources(ctx context.Context, in *GetFu
 	return out, nil
 }
 
+func (c *spikeServiceClient) ScaleFunction(ctx context.Context, in *ScaleFunctionRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, SpikeService_ScaleFunction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpikeServiceServer is the server API for SpikeService service.
 // All implementations must embed UnimplementedSpikeServiceServer
 // for forward compatibility.
@@ -114,6 +126,7 @@ type SpikeServiceServer interface {
 	DeleteFunction(context.Context, *DeleteFunctionRequest) (*DeleteFunctionResponse, error)
 	GetAllFunctions(context.Context, *Empty) (*GetAllFunctionsResponse, error)
 	GetFunctionResources(context.Context, *GetFunctionResourcesRequest) (*GetFunctionResourcesResponse, error)
+	ScaleFunction(context.Context, *ScaleFunctionRequest) (*Empty, error)
 	mustEmbedUnimplementedSpikeServiceServer()
 }
 
@@ -138,6 +151,9 @@ func (UnimplementedSpikeServiceServer) GetAllFunctions(context.Context, *Empty) 
 }
 func (UnimplementedSpikeServiceServer) GetFunctionResources(context.Context, *GetFunctionResourcesRequest) (*GetFunctionResourcesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetFunctionResources not implemented")
+}
+func (UnimplementedSpikeServiceServer) ScaleFunction(context.Context, *ScaleFunctionRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ScaleFunction not implemented")
 }
 func (UnimplementedSpikeServiceServer) mustEmbedUnimplementedSpikeServiceServer() {}
 func (UnimplementedSpikeServiceServer) testEmbeddedByValue()                      {}
@@ -250,6 +266,24 @@ func _SpikeService_GetFunctionResources_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpikeService_ScaleFunction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScaleFunctionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpikeServiceServer).ScaleFunction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpikeService_ScaleFunction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpikeServiceServer).ScaleFunction(ctx, req.(*ScaleFunctionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpikeService_ServiceDesc is the grpc.ServiceDesc for SpikeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -276,6 +310,10 @@ var SpikeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFunctionResources",
 			Handler:    _SpikeService_GetFunctionResources_Handler,
+		},
+		{
+			MethodName: "ScaleFunction",
+			Handler:    _SpikeService_ScaleFunction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

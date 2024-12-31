@@ -13,4 +13,5 @@ aws_security_groups:
   - sg-02221dbcd555d5277
 task_role: PixelsFaaSRole
 dispatch_timeout: 600
-max_req_queue_size: 1000
+auto_scale_step: 5 # 弹性伸缩检测步长(单位: s)
+auto_scale_window: 60 # 弹性伸缩监测窗口时间(单位: s)

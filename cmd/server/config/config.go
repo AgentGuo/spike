@@ -30,7 +30,8 @@ type ServerConfig struct {
 	AwsSecurityGroups []string `yaml:"aws_security_groups"`
 	TaskRole          string   `yaml:"task_role"`
 	DispatchTimeout   int      `yaml:"dispatch_timeout"`
-	MaxReqQueueSize   int      `yaml:"max_req_queue_size"`
+	AutoScaleStep     int      `yaml:"auto_scale_step"`
+	AutoScaleWindow   int      `yaml:"auto_scale_window"`
 }
 
 func SetConfigPath(path string) {
@@ -52,7 +53,8 @@ func GetConfig() *ServerConfig {
 			AwsSecurityGroups: []string{"sg-02221dbcd555d5277"},
 			TaskRole:          "PixelsFaaSRole",
 			DispatchTimeout:   20,
-			MaxReqQueueSize:   1000,
+			AutoScaleStep:     5,
+			AutoScaleWindow:   60,
 		}
 		if configPath != "" {
 			if fileContent, e := os.ReadFile(configPath); e == nil {

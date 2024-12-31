@@ -64,6 +64,14 @@ func (s *server) GetFunctionResources(ctx context.Context, req *api.GetFunctionR
 	return s.funcManager.GetFunctionResources(req)
 }
 
+func (s *server) ScaleFunction(ctx context.Context, req *api.ScaleFunctionRequest) (*api.Empty, error) {
+	err := s.funcManager.ScaleFunction(req)
+	if err != nil {
+		return nil, err
+	}
+	return &api.Empty{}, nil
+}
+
 func StartApiServer() {
 	address := fmt.Sprintf("%s:%d", config.GetConfig().ServerIp, config.GetConfig().ServerPort)
 	lis, err := net.Listen("tcp", address)

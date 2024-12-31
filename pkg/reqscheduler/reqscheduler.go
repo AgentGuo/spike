@@ -14,7 +14,6 @@ import (
 	"github.com/AgentGuo/spike/pkg/storage"
 	"github.com/AgentGuo/spike/pkg/storage/model"
 	"github.com/AgentGuo/spike/pkg/worker"
-	"github.com/Workiva/go-datastructures/queue"
 	"github.com/sirupsen/logrus"
 	"github.com/sony/sonyflake"
 	"google.golang.org/grpc"
@@ -38,21 +37,21 @@ type Response struct {
 }
 
 type ReqScheduler struct {
-	mysqlClient *storage.Mysql
-	logger      *logrus.Logger
-	reqQueue    *queue.Queue
-	flake       *sonyflake.Sonyflake
-	triggerCh   chan struct{}
+	mysql     *storage.Mysql
+	logger    *logrus.Logger
+	reqQueue  *ReqQueue
+	flake     *sonyflake.Sonyflake
+	triggerCh chan struct{}
 }
 
 func NewReqScheduler() *ReqScheduler {
 	mysqlClient := storage.NewMysql()
 	r := &ReqScheduler{
-		mysqlClient: mysqlClient,
-		logger:      logger.GetLogger(),
-		reqQueue:    queue.New(int64(config.GetConfig().MaxReqQueueSize)),
-		flake:       sonyflake.NewSonyflake(sonyflake.Settings{}),
-		triggerCh:   make(chan struct{}),
+		mysql:     mysqlClient,
+		logger:    logger.GetLogger(),
+		reqQueue:  NewReqQueue(),
+		flake:     sonyflake.NewSonyflake(sonyflake.Settings{}),
+		triggerCh: make(chan struct{}),
 	}
 	go r.ScheduleRoutine()
 	return r
@@ -66,10 +65,8 @@ func (r *ReqScheduler) ScheduleRoutine() {
 	for {
 		select {
 		case <-ticker.C:
-			r.logger.Infof("time ticker trigger")
 			break
 		case <-r.triggerCh:
-			r.logger.Infof("manual ticker trigger")
 			break
 		}
 		r.Schedule()
@@ -77,19 +74,14 @@ func (r *ReqScheduler) ScheduleRoutine() {
 }
 
 func (r *ReqScheduler) Schedule() {
-	if r.reqQueue.Empty() {
-		return
-	}
 	// step1: get request from queue
-	topItem, err := r.reqQueue.Peek()
-	if err != nil {
-		r.logger.Errorf("get request from queue failed, %v", err)
+	req := r.reqQueue.Peek()
+	if req == nil {
 		return
 	}
-	req := topItem.(*Request)
 
 	// step2: get function instance
-	funcInstances, err := r.mysqlClient.GetFuncInstanceByCondition(map[string]interface{}{
+	funcInstances, err := r.mysql.GetFuncInstanceByCondition(map[string]interface{}{
 		"function_name": req.FunctionName,
 		"last_status":   "RUNNING",
 	})
@@ -99,7 +91,7 @@ func (r *ReqScheduler) Schedule() {
 	}
 
 	// step4: get processing request
-	reqScheduleInfo, err := r.mysqlClient.GetReqScheduleInfoByFunctionName(req.FunctionName)
+	reqScheduleInfo, err := r.mysql.GetReqScheduleInfoByFunctionName(req.FunctionName)
 	if err != nil {
 		r.logger.Errorf("get request schedule info failed, %v", err)
 		return
@@ -170,16 +162,12 @@ func (r *ReqScheduler) Schedule() {
 		RequiredCpu:          req.RequiredCpu,
 		RequiredMemory:       req.RequiredMemory,
 	}
-	err = r.mysqlClient.UpdateReqScheduleInfo(newReqScheduleInfo)
+	err = r.mysql.UpdateReqScheduleInfo(newReqScheduleInfo)
 	if err != nil {
 		r.logger.Errorf("update req schedule info failed, %v", err)
 		return
 	}
-	_, err = r.reqQueue.Get(1)
-	if err != nil {
-		r.logger.Errorf("get request from queue failed, %v", err)
-		return
-	}
+	r.reqQueue.Pop()
 	r.logger.Infof("schedule request %d to node: %s(%s)", req.RequestID, choseAwsServiceName, chosenInsIpv4)
 	go r.CallInstanceFunctionRoutine(req, chosenInsIpv4)
 }
@@ -200,10 +188,7 @@ func (r *ReqScheduler) SubmitRequest(req *api.CallFunctionRequest, respChan chan
 	}
 
 	// step2: submit into request queue
-	err = r.reqQueue.Put(request)
-	if err != nil {
-		return err
-	}
+	r.reqQueue.Push(request)
 	r.triggerCh <- struct{}{}
 	return nil
 }
@@ -230,7 +215,7 @@ func (r *ReqScheduler) CallInstanceFunctionRoutine(req *Request, instanceIpv4 st
 		err:             err,
 	}
 	req.RespPayloadChan <- resp
-	err = r.mysqlClient.DeleteReqScheduleInfo(req.RequestID)
+	err = r.mysql.DeleteReqScheduleInfo(req.RequestID)
 	if err != nil {
 		r.logger.Errorf("delete req schedule info failed, %v", err)
 	}
@@ -259,7 +244,7 @@ func (r *ReqScheduler) CallInstanceFunction(reqPayload string, reqID uint64, ins
 }
 
 //func (f *ReqScheduler) CallFunction(req *api.CallFunctionRequest) (*api.CallFunctionResponse, error) {
-//	funcInstances, err := f.mysqlClient.GetFuncInstanceByCondition(map[string]interface{}{
+//	funcInstances, err := f.mysql.GetFuncInstanceByCondition(map[string]interface{}{
 //		"function_name": req.FunctionName,
 //		"cpu":           req.Cpu,
 //		"memory":        req.Memory,

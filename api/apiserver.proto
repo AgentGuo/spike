@@ -20,6 +20,8 @@ service SpikeService {
   rpc GetAllFunctions(Empty) returns (GetAllFunctionsResponse);
 
   rpc GetFunctionResources(GetFunctionResourcesRequest) returns (GetFunctionResourcesResponse);
+
+  rpc ScaleFunction(ScaleFunctionRequest) returns (Empty);
 }
 
 message Empty {}
@@ -32,6 +34,13 @@ message FunctionMetaData{
 
 message GetAllFunctionsResponse{
   repeated FunctionMetaData functions = 1;
+}
+
+message ScaleFunctionRequest{
+  string function_name = 1;
+  int32 cpu = 2;
+  int32 memory = 3;
+  int32 scale_cnt = 4;
 }
 
 // The request message containing the function name and input.

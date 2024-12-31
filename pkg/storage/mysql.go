@@ -162,7 +162,7 @@ func (m *Mysql) UpdateFuncInstanceBatch(data []model.FuncInstance) error {
 }
 
 func (m *Mysql) DeleteFuncInstanceServiceName(serviceName string) error {
-	return m.db.Unscoped().Where(map[string]interface{}{"service_name": serviceName}).Delete(&model.FuncInstance{}).Error
+	return m.db.Unscoped().Where(map[string]interface{}{"aws_service_name": serviceName}).Delete(&model.FuncInstance{}).Error
 }
 
 func (m *Mysql) DeleteFuncInstanceFunctionName(functionName string) error {
@@ -195,6 +195,12 @@ func (m *Mysql) GetReqScheduleInfoByFunctionName(functionName string) ([]model.R
 	var data []model.ReqScheduleInfo
 	return data, m.db.Where(map[string]interface{}{"function_name": functionName}).Find(&data).Error
 }
+
+func (m *Mysql) GetReqScheduleInfoByCondition(condition map[string]interface{}) ([]model.ReqScheduleInfo, error) {
+	var data []model.ReqScheduleInfo
+	return data, m.db.Where(condition).Find(&data).Error
+}
+
 func (m *Mysql) DeleteReqScheduleInfo(requestID uint64) error {
 	return m.db.Unscoped().Where(map[string]interface{}{"req_id": requestID}).Delete(&model.ReqScheduleInfo{}).Error
 }
