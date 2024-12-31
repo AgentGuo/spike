@@ -196,6 +196,11 @@ func (m *Mysql) GetReqScheduleInfoByFunctionName(functionName string) ([]model.R
 	return data, m.db.Where(map[string]interface{}{"function_name": functionName}).Find(&data).Error
 }
 
+func (m *Mysql) GetReqScheduleInfoByAwsServiceName(AwsServiceName string) ([]model.ReqScheduleInfo, error) {
+	var data []model.ReqScheduleInfo
+	return data, m.db.Where(map[string]interface{}{"placed_aws_service_name": AwsServiceName}).Find(&data).Error
+}
+
 func (m *Mysql) GetReqScheduleInfoByCondition(condition map[string]interface{}) ([]model.ReqScheduleInfo, error) {
 	var data []model.ReqScheduleInfo
 	return data, m.db.Where(condition).Find(&data).Error

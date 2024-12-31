@@ -121,8 +121,10 @@ func (r *ReqScheduler) Schedule() {
 		}
 	}
 	for _, reqInfo := range reqScheduleInfo {
-		insStatMap[reqInfo.PlacedAwsServiceName].cpuUsed = reqInfo.RequiredCpu
-		insStatMap[reqInfo.PlacedAwsServiceName].memoryUsed = reqInfo.RequiredMemory
+		if _, ok := insStatMap[reqInfo.PlacedAwsServiceName]; ok {
+			insStatMap[reqInfo.PlacedAwsServiceName].cpuUsed += reqInfo.RequiredCpu
+			insStatMap[reqInfo.PlacedAwsServiceName].memoryUsed += reqInfo.RequiredMemory
+		}
 	}
 	insStatList := make([]*instanceStat, 0, len(insStatMap))
 	for _, v := range insStatMap {
@@ -152,7 +154,7 @@ func (r *ReqScheduler) Schedule() {
 		}
 	}
 	if chosenInsIpv4 == "" {
-		r.logger.Errorf("no available instance to handle request")
+		r.logger.Warnf("no available instance to handle request")
 		return
 	}
 	newReqScheduleInfo := &model.ReqScheduleInfo{

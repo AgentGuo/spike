@@ -213,16 +213,40 @@ func (f *FuncManager) ScaleFunction(req *api.ScaleFunctionRequest) error {
 			if realScaleCnt >= 0 {
 				break
 			}
-			if err := f.awsClient.DeleteInstance(instance.AwsServiceName); err != nil {
-				f.logger.Errorf("delete ecs failed, serviceName: %s, err: %v", instance.AwsServiceName, err)
+			if instance.LaunchType == int32(Fargate) {
+				if err := f.mysql.DeleteFuncInstanceServiceName(instance.AwsServiceName); err != nil {
+					f.logger.Errorf("delete mysql func instance failed, serviceName: %s, err: %v", instance.AwsServiceName, err)
+				}
+				// 避免热实例删除
+				go f.AsyncDeleteFuncInstance(instance.AwsServiceName)
+				realScaleCnt++
 			}
-			if err := f.mysql.DeleteFuncInstanceServiceName(instance.AwsServiceName); err != nil {
-				f.logger.Errorf("delete mysql func instance failed, serviceName: %s, err: %v", instance.AwsServiceName, err)
-			}
-			realScaleCnt++
 		}
 	}
 	return nil
+}
+
+func (f *FuncManager) AsyncDeleteFuncInstance(awsServiceName string) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			break
+		}
+		reqList, err := f.mysql.GetReqScheduleInfoByAwsServiceName(awsServiceName)
+		if err != nil {
+			f.logger.Errorf("AsyncDeleteFuncInstance get req schedule info failed, awsServiceName: %s, err: %v", awsServiceName, err)
+			continue
+		}
+		if len(reqList) == 0 {
+			err = f.awsClient.DeleteInstance(awsServiceName)
+			if err != nil {
+				f.logger.Errorf("delete mysql func instance failed, serviceName: %s, err: %v", awsServiceName, err)
+			}
+			return
+		}
+	}
 }
 
 func (f *FuncManager) UpdateFunctionStatus(functionName string) {
