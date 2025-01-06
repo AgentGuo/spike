@@ -6,6 +6,7 @@
 package funcmanager
 
 import (
+	"github.com/AgentGuo/spike/pkg/constants"
 	"testing"
 )
 
@@ -93,16 +94,16 @@ func TestAwsClient_CreateInstance(t *testing.T) {
 	type args struct {
 		familyName   string
 		revision     int32
-		instanceType InstanceType
+		instanceType constants.InstanceType
 	}
 	tests := []struct {
 		name    string
 		args    args
 		wantErr bool
 	}{
-		{"test1", args{"pixels-worker-spike", 6, EC2}, false},
-		{"test2", args{"pixels-worker-spike", 6, Fargate}, false},
-		{"test3", args{"pixels-worker-spike", 6, FargateSpot}, false},
+		{"test1", args{"pixels-worker-spike", 6, constants.EC2}, false},
+		{"test2", args{"pixels-worker-spike", 6, constants.Fargate}, false},
+		{"test3", args{"pixels-worker-spike", 6, constants.FargateSpot}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

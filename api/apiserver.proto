@@ -119,13 +119,12 @@ message GetFunctionResourcesRequest{
 }
 
 message ResourceStatus{
-  string public_ipv4 = 1;
-  string private_ipv4 = 2;
-  int32 cpu = 3;
-  int32 memory = 4;
-  int32 launch_type = 5;
-  string last_status = 6;
-  string desired_status = 7;
+  string ipv4 = 1;
+  int32 cpu = 2;
+  int32 memory = 3;
+  string launch_type = 4;
+  string last_status = 5;
+  string desired_status = 6;
 }
 
 message GetFunctionResourcesResponse{

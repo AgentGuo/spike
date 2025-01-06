@@ -37,21 +37,23 @@ type Response struct {
 }
 
 type ReqScheduler struct {
-	mysql     *storage.Mysql
-	logger    *logrus.Logger
-	reqQueue  *ReqQueue
-	flake     *sonyflake.Sonyflake
-	triggerCh chan struct{}
+	mysql          *storage.Mysql
+	logger         *logrus.Logger
+	reqQueue       *ReqQueue
+	flake          *sonyflake.Sonyflake
+	triggerCh      chan struct{}
+	requestTimeout int
 }
 
 func NewReqScheduler() *ReqScheduler {
 	mysqlClient := storage.NewMysql()
 	r := &ReqScheduler{
-		mysql:     mysqlClient,
-		logger:    logger.GetLogger(),
-		reqQueue:  NewReqQueue(),
-		flake:     sonyflake.NewSonyflake(sonyflake.Settings{}),
-		triggerCh: make(chan struct{}),
+		mysql:          mysqlClient,
+		logger:         logger.GetLogger(),
+		reqQueue:       NewReqQueue(),
+		flake:          sonyflake.NewSonyflake(sonyflake.Settings{}),
+		triggerCh:      make(chan struct{}),
+		requestTimeout: config.GetConfig().ServerConfig.RequestTimeout,
 	}
 	go r.ScheduleRoutine()
 	return r
@@ -113,7 +115,7 @@ func (r *ReqScheduler) Schedule() {
 	for _, instance := range funcInstances {
 		insStatMap[instance.AwsServiceName] = &instanceStat{
 			awsServiceName: instance.AwsServiceName,
-			ipv4:           instance.PublicIpv4,
+			ipv4:           instance.Ipv4,
 			cpu:            instance.Cpu,
 			memory:         instance.Memory,
 			cpuUsed:        0,
@@ -170,7 +172,8 @@ func (r *ReqScheduler) Schedule() {
 		return
 	}
 	r.reqQueue.Pop()
-	r.logger.Infof("schedule request %d to node: %s(%s)", req.RequestID, choseAwsServiceName, chosenInsIpv4)
+	r.logger.Infof("schedule request %d(function_name: %s, cpu: %d, memory: %d) to node: %s(%s)",
+		req.RequestID, req.FunctionName, req.RequiredCpu, req.RequiredMemory, choseAwsServiceName, chosenInsIpv4)
 	go r.CallInstanceFunctionRoutine(req, chosenInsIpv4)
 }
 
@@ -188,6 +191,8 @@ func (r *ReqScheduler) SubmitRequest(req *api.CallFunctionRequest, respChan chan
 		RequiredMemory:  req.Memory,
 		RespPayloadChan: respChan,
 	}
+	r.logger.Infof("submit request %d(function_name: %s, cpu: %d, memory: %d), current queue size: %d",
+		request.RequestID, request.FunctionName, request.RequiredCpu, request.RequiredMemory, r.reqQueue.Len())
 
 	// step2: submit into request queue
 	r.reqQueue.Push(request)
@@ -211,6 +216,13 @@ func (r *ReqScheduler) CallFunction(req *api.CallFunctionRequest) (*api.CallFunc
 
 // CallInstanceFunctionRoutine 调用实例函数的协程
 func (r *ReqScheduler) CallInstanceFunctionRoutine(req *Request, instanceIpv4 string) {
+	startTime := time.Now()
+	defer func() {
+		elapsedTime := time.Since(startTime).Seconds()
+		r.logger.Infof("request %d(function_name: %s, cpu: %d, memory: %d) finished, cost time: %fs",
+			req.RequestID, req.FunctionName, req.RequiredCpu, req.RequiredMemory, elapsedTime)
+	}()
+
 	respPayload, err := r.CallInstanceFunction(req.ReqPayload, req.RequestID, instanceIpv4)
 	resp := Response{
 		ResponsePayload: respPayload,
@@ -226,14 +238,13 @@ func (r *ReqScheduler) CallInstanceFunctionRoutine(req *Request, instanceIpv4 st
 // CallInstanceFunction 调用实例函数
 func (r *ReqScheduler) CallInstanceFunction(reqPayload string, reqID uint64, instanceIpv4 string) (string, error) {
 	// TODO: 这里可以做连接复用
-	r.logger.Infof("call function %s", instanceIpv4)
 	conn, err := grpc.NewClient(fmt.Sprintf("%s:50052", instanceIpv4), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return "", err
 	}
 	defer conn.Close() // 确保连接关闭
 	workerServiceClient := worker.NewSpikeWorkerServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.GetConfig().DispatchTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(r.requestTimeout)*time.Second)
 	defer cancel()
 	funcServiceResp, err := workerServiceClient.CallWorkerFunction(ctx, &worker.CallWorkerFunctionReq{
 		Payload:   reqPayload,
@@ -244,34 +255,3 @@ func (r *ReqScheduler) CallInstanceFunction(reqPayload string, reqID uint64, ins
 	}
 	return funcServiceResp.Payload, nil
 }
-
-//func (f *ReqScheduler) CallFunction(req *api.CallFunctionRequest) (*api.CallFunctionResponse, error) {
-//	funcInstances, err := f.mysql.GetFuncInstanceByCondition(map[string]interface{}{
-//		"function_name": req.FunctionName,
-//		"cpu":           req.Cpu,
-//		"memory":        req.Memory,
-//		"last_status":   "RUNNING",
-//	})
-//	if err != nil {
-//		return nil, err
-//	} else if len(funcInstances) == 0 {
-//		return nil, fmt.Errorf("not such a function or function is not ready now")
-//	}
-//	task := funcInstances[rand.Intn(len(funcInstances))]
-//	f.logger.Infof("call function %s", task.PublicIpv4)
-//	conn, err := grpc.NewClient(fmt.Sprintf("%s:50052", task.PublicIpv4), grpc.WithTransportCredentials(insecure.NewCredentials()))
-//	if err != nil {
-//		return nil, err
-//	}
-//	workerServiceClient := worker.NewSpikeWorkerServiceClient(conn)
-//	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.GetConfig().DispatchTimeout)*time.Second)
-//	defer cancel()
-//	funcServiceResp, err := workerServiceClient.CallWorkerFunction(ctx, &worker.CallWorkerFunctionReq{
-//		Payload:   req.Payload,
-//		RequestId: strconv.FormatInt(time.Now().Unix(), 10),
-//	})
-//	if err != nil {
-//		return nil, err
-//	}
-//	return &api.CallFunctionResponse{ErrorCode: 0, Payload: funcServiceResp.Payload}, nil
-//}

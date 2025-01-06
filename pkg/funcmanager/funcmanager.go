@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/AgentGuo/spike/api"
 	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/constants"
 	"github.com/AgentGuo/spike/pkg/logger"
 	"github.com/AgentGuo/spike/pkg/reqscheduler"
 	"github.com/AgentGuo/spike/pkg/storage"
@@ -24,10 +25,15 @@ import (
 )
 
 type FuncManager struct {
-	awsClient *AwsClient
-	mysql     *storage.Mysql
-	logger    *logrus.Logger
-	reqQueue  *reqscheduler.ReqQueue
+	awsClient         *AwsClient
+	mysql             *storage.Mysql
+	logger            *logrus.Logger
+	reqQueue          *reqscheduler.ReqQueue
+	hotResourcePool   constants.InstanceType
+	coldResourcePool  constants.InstanceType
+	autoScalingStep   int
+	autoScalingWindow int
+	usePublicIpv4     bool
 }
 
 var (
@@ -38,12 +44,17 @@ var (
 func NewFuncManager() *FuncManager {
 	once.Do(func() {
 		funcManager = &FuncManager{
-			awsClient: NewAwsClient(),
-			mysql:     storage.NewMysql(),
-			logger:    logger.GetLogger(),
-			reqQueue:  reqscheduler.NewReqQueue(),
+			awsClient:         NewAwsClient(),
+			mysql:             storage.NewMysql(),
+			logger:            logger.GetLogger(),
+			reqQueue:          reqscheduler.NewReqQueue(),
+			hotResourcePool:   config.GetConfig().ServerConfig.HotResourcePool,
+			coldResourcePool:  config.GetConfig().ServerConfig.ColdResourcePool,
+			autoScalingStep:   config.GetConfig().ServerConfig.AutoScalingStep,
+			autoScalingWindow: config.GetConfig().ServerConfig.AutoScalingWindow,
+			usePublicIpv4:     config.GetConfig().AwsConfig.UsePublicIpv4,
 		}
-		go funcManager.FunctionAutoScale()
+		go funcManager.FunctionAutoScaling()
 	})
 	return funcManager
 }
@@ -106,8 +117,7 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 	// step3: create function instance
 	var funcInstances []model.FuncInstance
 	for _, res := range resourceSpecList {
-		// TODO: test only
-		awsServiceNames, err := f.awsClient.BatchCreateInstance(res.Family, res.Revision, Fargate, res.MinReplica)
+		awsServiceNames, err := f.awsClient.BatchCreateInstance(res.Family, res.Revision, f.hotResourcePool, res.MinReplica)
 		if err != nil {
 			f.logger.Errorf("create ecs failed, err: %v", err)
 			return err
@@ -121,8 +131,7 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 				AwsFamily:      res.Family,
 				AwsRevision:    res.Revision,
 				LastStatus:     "NOT_CREATE",
-				//LaunchType:     int32(EC2),
-				LaunchType: int32(Fargate), // TODO: test only
+				LaunchType:     f.hotResourcePool,
 			})
 		}
 	}
@@ -184,7 +193,7 @@ func (f *FuncManager) ScaleFunction(req *api.ScaleFunctionRequest) error {
 	}
 
 	if realScaleCnt > 0 {
-		awsServiceNames, err := f.awsClient.BatchCreateInstance(awsTaskDef.TaskFamily, awsTaskDef.TaskRevision, Fargate, realScaleCnt)
+		awsServiceNames, err := f.awsClient.BatchCreateInstance(awsTaskDef.TaskFamily, awsTaskDef.TaskRevision, f.coldResourcePool, realScaleCnt)
 		if err != nil {
 			f.logger.Errorf("create ecs failed, err: %v", err)
 			return err
@@ -199,7 +208,7 @@ func (f *FuncManager) ScaleFunction(req *api.ScaleFunctionRequest) error {
 				AwsFamily:      awsTaskDef.TaskFamily,
 				AwsRevision:    awsTaskDef.TaskRevision,
 				LastStatus:     "NOT_CREATE",
-				LaunchType:     int32(Fargate),
+				LaunchType:     f.coldResourcePool,
 			})
 		}
 		if err := f.mysql.UpdateFuncInstanceBatch(funcInstances); err != nil {
@@ -213,7 +222,7 @@ func (f *FuncManager) ScaleFunction(req *api.ScaleFunctionRequest) error {
 			if realScaleCnt >= 0 {
 				break
 			}
-			if instance.LaunchType == int32(Fargate) {
+			if instance.LaunchType == f.coldResourcePool {
 				if err := f.mysql.DeleteFuncInstanceServiceName(instance.AwsServiceName); err != nil {
 					f.logger.Errorf("delete mysql func instance failed, serviceName: %s, err: %v", instance.AwsServiceName, err)
 				}
@@ -259,7 +268,7 @@ func (f *FuncManager) UpdateFunctionStatus(functionName string) {
 		}
 		if isAllReady := f.UpdateFuncInstancesStatus(funcInstances); isAllReady {
 			elapsedTime := time.Since(startTime).Seconds()
-			f.logger.Infof("%s's all task is ready, cost time: %fs", functionName, elapsedTime)
+			f.logger.Infof("function %s's all instance is ready, cost time: %fs", functionName, elapsedTime)
 			return
 		}
 		time.Sleep(time.Second)
@@ -316,8 +325,11 @@ func (f *FuncManager) UpdateFuncInstancesStatus(funcInstances []model.FuncInstan
 		}
 		instanceIdx := taskMap[*task.TaskArn]
 		funcInstances[instanceIdx].AwsTaskArn = *task.TaskArn
-		funcInstances[instanceIdx].PrivateIpv4 = privateIpv4
-		funcInstances[instanceIdx].PublicIpv4 = publicIpv4
+		if f.usePublicIpv4 {
+			funcInstances[instanceIdx].Ipv4 = privateIpv4
+		} else {
+			funcInstances[instanceIdx].Ipv4 = publicIpv4
+		}
 		funcInstances[instanceIdx].Cpu = int32(cpu)
 		funcInstances[instanceIdx].Memory = int32(memory)
 		funcInstances[instanceIdx].LastStatus = *task.LastStatus
@@ -394,11 +406,10 @@ func (f *FuncManager) GetFunctionResources(req *api.GetFunctionResourcesRequest)
 	}
 	for _, taskData := range taskDataList {
 		resp.Resources = append(resp.Resources, &api.ResourceStatus{
-			PublicIpv4:    taskData.PublicIpv4,
-			PrivateIpv4:   taskData.PrivateIpv4,
+			Ipv4:          taskData.Ipv4,
 			Cpu:           taskData.Cpu,
 			Memory:        taskData.Memory,
-			LaunchType:    taskData.LaunchType,
+			LaunchType:    taskData.LaunchType.String(),
 			LastStatus:    taskData.LastStatus,
 			DesiredStatus: taskData.DesiredStatus,
 		})
@@ -406,10 +417,9 @@ func (f *FuncManager) GetFunctionResources(req *api.GetFunctionResourcesRequest)
 	return resp, nil
 }
 
-func (f *FuncManager) FunctionAutoScale() {
-	autoScaleStep, autoScaleWindow := config.GetConfig().AutoScaleStep, config.GetConfig().AutoScaleWindow
-	windowLen := autoScaleWindow / autoScaleStep
-	ticker := time.NewTicker(time.Duration(autoScaleStep) * time.Second)
+func (f *FuncManager) FunctionAutoScaling() {
+	windowLen := f.autoScalingWindow / f.autoScalingStep
+	ticker := time.NewTicker(time.Duration(f.autoScalingStep) * time.Second)
 	defer ticker.Stop()
 	hisReqs := list.New()
 	for {

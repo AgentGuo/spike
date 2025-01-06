@@ -29,13 +29,13 @@ var (
 func NewMysql() *Mysql {
 	var initErr error
 	mysqlInitOnce.Do(func() {
-		initErr = initMysql(config.GetConfig().MysqlDsn)
+		initErr = initMysql(config.GetConfig().ServerConfig.MysqlDsn)
 	})
 	if initErr != nil {
 		logger.GetLogger().Fatal(initErr)
 	}
 
-	db, err := gorm.Open(mysql.Open(config.GetConfig().MysqlDsn), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(config.GetConfig().ServerConfig.MysqlDsn), &gorm.Config{})
 	if err != nil {
 		logger.GetLogger().Fatal(err)
 	}

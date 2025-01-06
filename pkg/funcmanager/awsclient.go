@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/AgentGuo/spike/cmd/server/config"
+	"github.com/AgentGuo/spike/pkg/constants"
 	"github.com/AgentGuo/spike/pkg/logger"
 	"github.com/AgentGuo/spike/pkg/utils"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -21,14 +22,6 @@ import (
 	"sync"
 )
 
-type InstanceType int
-
-const (
-	EC2 InstanceType = iota
-	Fargate
-	FargateSpot
-)
-
 type AwsClient struct {
 	awsCfg            *aws.Config
 	ecsClient         *ecs.Client
@@ -37,7 +30,9 @@ type AwsClient struct {
 	subnets           []string
 	securityGroups    []string
 	logger            *logrus.Logger
-	CapacityProviders map[InstanceType]string
+	capacityProviders map[constants.InstanceType]string
+	usePublicIpv4     bool
+	taskRole          string
 	flake             *sonyflake.Sonyflake
 }
 
@@ -51,16 +46,18 @@ func NewAwsClient() *AwsClient {
 		awsCfg:         &cfg,
 		ecsClient:      ecs.NewFromConfig(cfg),
 		ec2Client:      ec2.NewFromConfig(cfg),
-		cluster:        config.GetConfig().AwsCluster,
-		subnets:        config.GetConfig().AwsSubnets,
-		securityGroups: config.GetConfig().AwsSecurityGroups,
+		cluster:        config.GetConfig().AwsConfig.AwsCluster,
+		subnets:        config.GetConfig().AwsConfig.AwsSubnets,
+		securityGroups: config.GetConfig().AwsConfig.AwsSecurityGroups,
 		logger:         logger.GetLogger(),
-		CapacityProviders: map[InstanceType]string{
-			EC2:         config.GetConfig().EC2Provider,
-			Fargate:     "FARGATE",
-			FargateSpot: "FARGATE_SPOT",
+		capacityProviders: map[constants.InstanceType]string{
+			constants.EC2:         config.GetConfig().AwsConfig.EC2Provider,
+			constants.Fargate:     "FARGATE",
+			constants.FargateSpot: "FARGATE_SPOT",
 		},
-		flake: sonyflake.NewSonyflake(sonyflake.Settings{}),
+		usePublicIpv4: config.GetConfig().AwsConfig.UsePublicIpv4,
+		taskRole:      config.GetConfig().AwsConfig.TaskRole,
+		flake:         sonyflake.NewSonyflake(sonyflake.Settings{}),
 	}
 }
 
@@ -72,7 +69,7 @@ func (a *AwsClient) GenServiceName(awsFamilyName string) string {
 	return fmt.Sprintf("%s_%d", awsFamilyName, id)
 }
 
-func (a *AwsClient) BatchCreateInstance(awsFamilyName string, awsRevision int32, instanceType InstanceType, replicas int32) ([]string, error) {
+func (a *AwsClient) BatchCreateInstance(awsFamilyName string, awsRevision int32, instanceType constants.InstanceType, replicas int32) ([]string, error) {
 	var wg sync.WaitGroup
 	awsServiceNames := make([]string, replicas)
 	errors := make([]error, replicas)
@@ -109,17 +106,19 @@ func (a *AwsClient) BatchCreateInstance(awsFamilyName string, awsRevision int32,
 
 // CreateInstance 为了方便管理，避免出现热实例缩容的情况，所以创建一个一个service，
 // 而不是一个service下创建多个replicas，这样可以准确控制扩缩容的实例
-func (a *AwsClient) CreateInstance(awsFamilyName string, awsRevision int32, instanceType InstanceType) (string, error) {
+func (a *AwsClient) CreateInstance(awsFamilyName string, awsRevision int32, instanceType constants.InstanceType) (string, error) {
 	awsServiceName := a.GenServiceName(awsFamilyName)
-	assignPublicIp := types.AssignPublicIpEnabled
-	if instanceType == EC2 {
+	var assignPublicIp types.AssignPublicIp
+	if instanceType == constants.Fargate && a.usePublicIpv4 {
+		assignPublicIp = types.AssignPublicIpEnabled
+	} else {
 		assignPublicIp = types.AssignPublicIpDisabled
 	}
 	output, err := a.ecsClient.CreateService(context.TODO(), &ecs.CreateServiceInput{
 		ServiceName: aws.String(awsServiceName),
 		CapacityProviderStrategy: []types.CapacityProviderStrategyItem{
 			{
-				CapacityProvider: aws.String(a.CapacityProviders[instanceType]),
+				CapacityProvider: aws.String(a.capacityProviders[instanceType]),
 				Base:             0,
 				Weight:           1,
 			},
@@ -223,8 +222,8 @@ func (a *AwsClient) RegTaskDef(functionName string, cpu int32, memory int32, ima
 			CpuArchitecture:       types.CPUArchitectureX8664,
 			OperatingSystemFamily: types.OSFamilyLinux,
 		},
-		ExecutionRoleArn: aws.String(config.GetConfig().TaskRole),
-		TaskRoleArn:      aws.String(config.GetConfig().TaskRole),
+		ExecutionRoleArn: aws.String(a.taskRole),
+		TaskRoleArn:      aws.String(a.taskRole),
 	})
 	if err != nil {
 		a.logger.Errorf("failed to register task definition, err: %v, resp: %s", err, utils.GetJson(output))

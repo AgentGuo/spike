@@ -37,18 +37,24 @@ func (s *server) CallFunction(ctx context.Context, req *api.CallFunctionRequest)
 }
 
 func (s *server) CreateFunction(ctx context.Context, req *api.CreateFunctionRequest) (*api.CreateFunctionResponse, error) {
+	s.logger.Infof("create funciton %s", req.FunctionName)
 	err := s.funcManager.CreateFunction(req)
 	if err != nil {
+		s.logger.Errorf("create function %s failed: %v", req.FunctionName, err)
 		return nil, err
 	}
+	s.logger.Infof("create function %s success", req.FunctionName)
 	return &api.CreateFunctionResponse{Code: 0, Message: "Function added"}, nil
 }
 
 func (s *server) DeleteFunction(ctx context.Context, req *api.DeleteFunctionRequest) (*api.DeleteFunctionResponse, error) {
+	s.logger.Infof("delete function %s", req.FunctionName)
 	err := s.funcManager.DeleteFunction(req)
 	if err != nil {
+		s.logger.Errorf("delete function %s failed: %v", req.FunctionName, err)
 		return nil, err
 	}
+	s.logger.Infof("delete function %s success", req.FunctionName)
 	return &api.DeleteFunctionResponse{Code: 0, Message: "Function deleted"}, nil
 }
 
@@ -65,15 +71,18 @@ func (s *server) GetFunctionResources(ctx context.Context, req *api.GetFunctionR
 }
 
 func (s *server) ScaleFunction(ctx context.Context, req *api.ScaleFunctionRequest) (*api.Empty, error) {
+	s.logger.Infof("scale function %s, cpu: %d, memory: %d, scale_cnt: %d", req.FunctionName, req.Cpu, req.Memory, req.ScaleCnt)
 	err := s.funcManager.ScaleFunction(req)
 	if err != nil {
+		s.logger.Errorf("scale function %s failed: %v", req.FunctionName, err)
 		return nil, err
 	}
+	s.logger.Infof("scale function %s success", req.FunctionName)
 	return &api.Empty{}, nil
 }
 
 func StartApiServer() {
-	address := fmt.Sprintf("%s:%d", config.GetConfig().ServerIp, config.GetConfig().ServerPort)
+	address := fmt.Sprintf("0.0.0.0:%d", config.GetConfig().ServerConfig.ServerPort)
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
@@ -89,7 +98,7 @@ func StartApiServer() {
 	// Register reflection service on gRPC server.
 	reflection.Register(grpcServer)
 
-	log.Printf("gRPC server is running on %s\n", address)
+	log.Printf("gRPC server is running on port %d\n", config.GetConfig().ServerConfig.ServerPort)
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}

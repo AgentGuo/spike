@@ -39,6 +39,10 @@ func NewReqQueue() *ReqQueue {
 	return reqQueueInstance
 }
 
+func (r *ReqQueue) Len() int {
+	return r.qu.Len()
+}
+
 // Peek get the top request from the queue
 func (r *ReqQueue) Peek() *Request {
 	r.mutex.RLock()
