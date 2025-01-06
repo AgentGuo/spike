@@ -20,7 +20,7 @@ docker exec -it mysql-spike mysql -uroot -pspikepassword -e "CREATE DATABASE spi
 step3: build spike
 
 ```shell
-go build -o build/spike-server github.com/AgentGuo/spike/cmd/server
+sh build.sh
 ```
 
 step4: run spike
