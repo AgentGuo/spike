@@ -19,7 +19,7 @@ server_config:
   auto_scaling_window: 60 # auto-scaling windows size(in seconds)
 
 aws_config:
-  use_public_ipv4: false
+  use_public_ipv4: true
   aws_cluster: spike_cluster_mini
   aws_subnets:
     - subnet-01930cb57dbc12f7e

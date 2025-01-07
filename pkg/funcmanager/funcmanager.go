@@ -104,6 +104,7 @@ func (f *FuncManager) CreateFunction(req *api.CreateFunctionRequest) error {
 			Revision:   revision,
 		})
 	}
+	// TODO: 事务
 	err := funcManager.mysql.CreateFuncMetaData(&model.FuncMetaData{
 		FunctionName: req.FunctionName,
 		ImageUrl:     req.ImageUrl,
@@ -280,6 +281,7 @@ func (f *FuncManager) UpdateFuncInstancesStatus(funcInstances []model.FuncInstan
 	isAllReady := true
 	var taskList []string
 	taskMap := make(map[string]int)
+	// TODO: 需要处理首次创建失败后重试的场景
 	for i, instance := range funcInstances {
 		if instance.LastStatus != instance.DesiredStatus {
 			isAllReady = false

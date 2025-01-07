@@ -217,11 +217,6 @@ func (r *ReqScheduler) CallFunction(req *api.CallFunctionRequest) (*api.CallFunc
 // CallInstanceFunctionRoutine 调用实例函数的协程
 func (r *ReqScheduler) CallInstanceFunctionRoutine(req *Request, instanceIpv4 string) {
 	startTime := time.Now()
-	defer func() {
-		elapsedTime := time.Since(startTime).Seconds()
-		r.logger.Infof("request %d(function_name: %s, cpu: %d, memory: %d) finished, cost time: %fs",
-			req.RequestID, req.FunctionName, req.RequiredCpu, req.RequiredMemory, elapsedTime)
-	}()
 
 	respPayload, err := r.CallInstanceFunction(req.ReqPayload, req.RequestID, instanceIpv4)
 	resp := Response{
@@ -233,6 +228,11 @@ func (r *ReqScheduler) CallInstanceFunctionRoutine(req *Request, instanceIpv4 st
 	if err != nil {
 		r.logger.Errorf("delete req schedule info failed, %v", err)
 	}
+	defer func() {
+		elapsedTime := time.Since(startTime).Seconds()
+		r.logger.Infof("request %d(function_name: %s, cpu: %d, memory: %d) finished, cost time: %fs, req: %s, resp: %s",
+			req.RequestID, req.FunctionName, req.RequiredCpu, req.RequiredMemory, elapsedTime, req.ReqPayload, respPayload)
+	}()
 }
 
 // CallInstanceFunction 调用实例函数
